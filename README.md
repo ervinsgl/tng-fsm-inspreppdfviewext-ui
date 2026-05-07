@@ -1,4 +1,8 @@
-# Preliminary Report Preview - FSM Mobile Integration App
+# Inspection Report PDF Viewer Extension — FSM Mobile App
+
+> **App ID:** `com.tng.fsm.inspreppdfviewext.app`
+> **CF App Name:** `tng-fsm-inspreppdfviewext-ui-dev`
+> **Repository:** `tng-fsm-inspreppdfviewext-ui`
 
 A SAP Fiori mobile application for SAP Field Service Management (FSM), designed to run in FSM Mobile (Web Container). Automatically generates and displays a checklist report (PDF) based on the opened checklist instance.
 
@@ -107,7 +111,7 @@ This application provides a seamless preliminary report preview experience withi
                                │ OAuth Token
                                ▼
                       ┌─────────────────┐
-                      │ BTP Destination │  (FSM_OAUTH_CONNECT)
+                      │ BTP Destination │  (FSM_S4E)
                       │    Service      │
                       └────────┬────────┘
                                │ Authenticated Request
@@ -137,6 +141,38 @@ This application provides a seamless preliminary report preview experience withi
 
 ---
 
+## 🔐 Security
+
+This app implements **Path 1 (FSM Mobile)** authentication per the [security architecture](SECURITY.md).
+
+### Inbound auth flow
+
+1. **Entry POST validation:** `/web-container-access-point` and `/` POST handlers validate the `authenticationKey` field in the request body against the `FSM_WEBCONTAINER_AUTH_KEY` environment variable using constant-time comparison.
+2. **Session issuance:** On successful auth, a 32-byte random session token is generated, stored in an in-memory map, and set as an `HttpOnly; Secure; SameSite=Lax` cookie named `fsm_session`.
+3. **API protection:** All `/api/v1/*` endpoints require a valid session cookie via the `requireSession` middleware. Missing/expired/unknown cookies return 401.
+4. **Sliding TTL:** Each authenticated request refreshes the session expiration (60 minutes from last activity). Idle sessions are removed by a background cleanup loop every 10 minutes.
+
+### What's NOT implemented (yet)
+
+- **Path 2 (FSM Web UI Shell):** This app is currently used only from FSM Mobile. The JWT validator and Shell session bootstrap (`/api/v1/shell-session-init`) are not implemented. If/when Web UI usage is needed, this would be added per the design in [SECURITY.md](SECURITY.md).
+- **Multi-instance scaling:** Sessions are in-memory. The app is pinned to `instances: 1` in `manifest.yaml`. Horizontal scaling would require migrating session storage to Redis or similar.
+
+### Required environment variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `FSM_WEBCONTAINER_AUTH_KEY` | Yes — server refuses to start without it | Shared secret matching the FSM Admin Web Container Authentication Key. Set via `cf set-env` and `cf restage`. |
+
+### Required FSM configuration
+
+| Setting | Where | Value |
+|---|---|---|
+| Authentication Key | FSM Admin → Companies → [Company] → Web Containers → [This Web Container] | Must byte-exactly match `FSM_WEBCONTAINER_AUTH_KEY` env var |
+
+For full security architecture details, threat model, and rotation procedures, see [SECURITY.md](SECURITY.md).
+
+---
+
 ## ✅ Prerequisites
 
 ### Required Tools:
@@ -156,11 +192,11 @@ This application provides a seamless preliminary report preview experience withi
 
 | Service | Instance Name | Purpose |
 |---------|---------------|---------|
-| **Destination Service** | `com.tng.fsm.inspreppdfviewext.app-destination` | FSM API connectivity |
+| **Destination Service** | `fsm-inspreppdfviewext-destination-dev` | FSM API connectivity (binds to subaccount-level destination `FSM_S4E`) |
 
-### Destination Configuration (FSM_OAUTH_CONNECT):
+### Destination Configuration (FSM_S4E):
 
-The destination `FSM_OAUTH_CONNECT` must be configured in BTP Cockpit with:
+The destination `FSM_S4E` must be configured in BTP Cockpit with:
 
 | Property | Description |
 |----------|-------------|
@@ -206,15 +242,15 @@ npm install
 The destination name is configured in a single place. Edit `utils/FSMService.js`:
 ```javascript
 this.config = {
-    destinationName: 'FSM_OAUTH_CONNECT'  // Change here to switch destination
+    destinationName: 'FSM_S4E'  // Change here to switch destination
 };
 ```
 
 ### 3. Configure BTP Destination
 
-Create a destination named **FSM_OAUTH_CONNECT** in SAP BTP Cockpit:
+Create a destination named **FSM_S4E** in SAP BTP Cockpit:
 ```
-Name: FSM_OAUTH_CONNECT
+Name: FSM_S4E
 Type: HTTP
 URL: https://de.fsm.cloud.sap
 Authentication: OAuth2ClientCredentials
@@ -241,7 +277,29 @@ cf create-service destination lite com.tng.fsm.inspreppdfviewext.app-destination
 cf push
 ```
 
-### 6. Get Application URL
+### 6. Configure FSM Authentication Key
+
+Generate the shared secret:
+
+​```bash
+openssl rand -base64 32
+​```
+
+Set it as an environment variable on the deployed app:
+
+​```bash
+cf set-env tng-fsm-inspreppdfviewext-ui-dev FSM_WEBCONTAINER_AUTH_KEY '<paste-value-from-openssl>'
+cf restage tng-fsm-inspreppdfviewext-ui-dev
+​```
+
+Configure the same value in FSM Admin:
+- **FSM Admin → Companies → [Your Company] → Web Containers → [Your Web Container] → Authentication Key field**
+
+The two values must match byte-exactly. Mismatches return 401 on every Mobile launch.
+
+> **Without this step, the app crash-loops on startup with `FATAL: FSM_WEBCONTAINER_AUTH_KEY environment variable is not set`.**
+
+### 7. Get Application URL
 ```bash
 cf app com.tng.fsm.inspreppdfviewext.app
 ```
@@ -351,7 +409,7 @@ When opened from FSM Mobile, the web container automatically POSTs context data:
 └──────────────────────────┬──────────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  3. Fetch FSM_OAUTH_CONNECT destination → Get FSM URL + OAuth config    │
+│  3. Fetch FSM_S4E destination → Get FSM URL + OAuth config    │
 └──────────────────────────┬──────────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -402,11 +460,11 @@ webapp/
 │
 ├── view/
 │   ├── App.view.xml                 # Root view (App container)
-│   └── View1.view.xml               # Main view (PDF Viewer + error states)
+│   └── InspRepPDFViewExt.view.xml   # Main view (PDF Viewer + error states)
 │
 ├── controller/
-│   ├── App.controller.js            # Root controller
-│   └── View1.controller.js          # Main controller (context → UdoValues → report)
+│   ├── App.controller.js                 # Root controller
+│   └── InspRepPDFViewExt.controller.js   # Main controller (context → UdoValues → report)
 │
 ├── model/
 │   └── models.js                    # Device model
@@ -427,17 +485,17 @@ webapp/
 ### Backend Endpoints
 
 #### Web Container
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/web-container-access-point` | Receive context from FSM Mobile web container |
-| POST | `/` | Alternative web container entry point (FSM fallback) |
-| GET | `/web-container-context?session=<key>` | Retrieve stored web container context |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/web-container-access-point` | Receive context from FSM Mobile web container | Authentication Key |
+| POST | `/` | Alternative web container entry point (FSM fallback) | Authentication Key |
+| GET | `/api/v1/context` | Retrieve stored web container context for the current session | Session cookie |
 
 #### UdoValue & Report
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/udo-values?cloudId=<id>` | Query UdoValues: returns checklist instance + report template UUID |
-| GET | `/api/build-report?objectId=<id>&reportTemplate=<id>&language=<lang>` | Build report PDF via FSM Reporting API |
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/v1/udo-values?cloudId=<id>` | Query UdoValues: returns checklist instance + report template UUID | Session cookie |
+| GET | `/api/v1/build-report?objectId=<id>&reportTemplate=<id>&language=<lang>` | Build report PDF via FSM Reporting API | Session cookie |
 
 ### FSM APIs Used
 
@@ -483,6 +541,10 @@ webapp/
 | 401/403 on API calls | OAuth token expired or invalid credentials | Check destination configuration in BTP Cockpit |
 | Destination service not bound | VCAP_SERVICES missing destination | Run `cf bind-service com.tng.fsm.inspreppdfviewext.app com.tng.fsm.inspreppdfviewext.app-destination` and restage |
 | Report takes long to load | Complex report template | FSM has a 5-minute / 1000-page limit for report generation |
+| App crash-loops with `FATAL: FSM_WEBCONTAINER_AUTH_KEY environment variable is not set` | Env var not set | `cf set-env tng-fsm-inspreppdfviewext-ui-dev FSM_WEBCONTAINER_AUTH_KEY '<value>' && cf restage tng-fsm-inspreppdfviewext-ui-dev` |
+| Mobile launch returns HTTP 401 with log `WC-ACCESS-POINT: rejected POST — authenticationKey mismatch` | Env var value doesn't match FSM Admin's Authentication Key field | Compare `cf env tng-fsm-inspreppdfviewext-ui-dev \| grep FSM_WEBCONTAINER_AUTH_KEY` against FSM Admin → Web Containers → Authentication Key. Both must be byte-exactly identical. |
+| API calls return 401 with log `AUTH: rejected ... missing-credential` | Session cookie not present (e.g. opened directly in browser instead of via FSM Mobile) | Open from FSM Mobile via the configured Web Container, not directly in a browser |
+| API calls return 401 with log `AUTH: rejected ... invalid-or-expired` | Session expired (60 min idle) or app restarted (in-memory sessions purged) | User re-launches from FSM Mobile to issue a new session |
 
 ### Server Logs
 
@@ -506,14 +568,16 @@ cf logs com.tng.fsm.inspreppdfviewext.app --recent
 
 |                                    |                                                          |
 |------------------------------------|----------------------------------------------------------|
-| **App Name**                       | Preliminary Report Preview                               |
-| **Module Name**                    | com.tng.fsm.inspreppdfviewext.app                                         |
+| **App Name**                       | Inspection Report PDF Viewer Extension                   |
+| **App ID**                         | com.tng.fsm.inspreppdfviewext.app                        |
+| **CF App Name**                    | tng-fsm-inspreppdfviewext-ui-dev                         |
 | **Framework**                      | SAP UI5 (Fiori) + Node.js Express                        |
 | **UI5 Theme**                      | sap_horizon                                              |
 | **UI5 Version**                    | 1.144.1 (loaded from CDN)                                |
 | **Deployment Platform**            | SAP Business Technology Platform (Cloud Foundry)         |
 | **Node.js Version**                | 18+                                                      |
 | **Supported Contexts**             | FSM Mobile (Web Container)                               |
+| **Auth Model**                     | Path 1 (Authentication Key + session cookie)             |
 | **BTP Region**                     | EU10                                                     |
 
 ---
@@ -540,16 +604,24 @@ cf logs com.tng.fsm.inspreppdfviewext.app --recent
 - Download button for saving PDF locally
 
 **Infrastructure:**
-- Single-point destination configuration (`FSM_OAUTH_CONNECT`)
+- Single-point destination configuration (`FSM_S4E`)
 - No hardcoded account/company fallbacks (reads from destination only)
 - OAuth token caching with 5-minute expiry buffer
 - Centralized `_getConnection()` helper (DRY pattern)
+
+**Security:**
+- Authentication Key validation on Mobile entry POSTs
+- HttpOnly session cookie issuance
+- `requireSession` middleware on all `/api/v1/*` endpoints
+- Sliding 60-minute TTL
+- Operational logging per SECURITY.md signals
 
 ### 📋 Planned:
 - German translations (i18n)
 - Print functionality
 - Report type selection (PDF/DOCX/XLS)
 - Error detail display in UI
+- Web UI (Shell) flow — JWT validation, /api/v1/shell-session-init
 
 ---
 
