@@ -15,9 +15,21 @@
 
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const FSMService = require('./utils/FSMService');
 
 const app = express();
+
+// ===========================
+// AUTH KEY VALIDATION (FAIL LOUD)
+// ===========================
+const FSM_WEBCONTAINER_AUTH_KEY = process.env.FSM_WEBCONTAINER_AUTH_KEY;
+if (!FSM_WEBCONTAINER_AUTH_KEY) {
+    console.error('FATAL: FSM_WEBCONTAINER_AUTH_KEY environment variable is not set.');
+    console.error('To set it: cf set-env tng-fsm-inspreppdfviewext-ui-dev FSM_WEBCONTAINER_AUTH_KEY \'<value>\' && cf restage tng-fsm-inspreppdfviewext-ui-dev');
+    process.exit(1);
+}
+console.log(`FSM_WEBCONTAINER_AUTH_KEY is set (${FSM_WEBCONTAINER_AUTH_KEY.length} chars)`);
 
 // ===========================
 // SESSION CONTEXT STORAGE
@@ -66,23 +78,52 @@ app.enable('trust proxy');
 // ===========================
 
 /**
- * Stores FSM Mobile context in the session map and redirects to the app root.
- * The session key is passed as a URL query param so the frontend can
- * retrieve exactly its own context, even if other users open simultaneously.
- *
- * @param {Object} body - FSM Mobile POST body
- * @param {Object} res  - Express response
+ * Validate the FSM Mobile authenticationKey using constant-time comparison.
+ * Returns true if the provided key matches FSM_WEBCONTAINER_AUTH_KEY.
  */
-function handleMobilePost(body, res) {
-    const userName = body?.userName || 'unknown';
-    const cloudId  = body?.cloudId  || 'unknown';
-    const key = `${userName}-${cloudId}`;
+function isValidAuthKey(providedKey) {
+    if (!providedKey || typeof providedKey !== 'string') {
+        return false;
+    }
+    const provided = Buffer.from(providedKey);
+    const expected = Buffer.from(FSM_WEBCONTAINER_AUTH_KEY);
 
+    // Length-mismatch check before timingSafeEqual — it requires equal-length buffers
+    if (provided.length !== expected.length) {
+        return false;
+    }
+    return crypto.timingSafeEqual(provided, expected);
+}
+
+/**
+ * Handle the FSM Mobile entry POST.
+ * Validates authenticationKey, stores context if valid, redirects to the app.
+ */
+function handleMobilePost(req, res) {
+    const body = req.body || {};
+    const userName = body.userName || 'unknown';
+    const cloudId  = body.cloudId  || 'unknown';
+
+    // ===========================
+    // AUTH CHECK
+    // ===========================
+    if (!isValidAuthKey(body.authenticationKey)) {
+        const reason = !body.authenticationKey ? 'missing' : 'mismatch';
+        console.warn(`WC-ACCESS-POINT: rejected POST — authenticationKey ${reason} | user: ${userName} | cloudId: ${cloudId}`);
+        return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // ===========================
+    // STORE CONTEXT
+    // ===========================
+    const key = `${userName}-${cloudId}`;
     sessions[key] = { ...body, _timestamp: Date.now() };
 
-    console.log(`Web container opened | user: ${userName} | objectType: ${body?.objectType} | session: ${key}`);
+    console.log(`WC-ACCESS-POINT: context stored | user: ${userName} | objectType: ${body.objectType} | contextKey: ${key}`);
 
-    const host = res.req.protocol + '://' + res.req.get('host');
+    // Redirect to app root with session key as query param
+    // (Note: this query param mechanism will be replaced by an HttpOnly cookie in S3)
+    const host = req.protocol + '://' + req.get('host');
     res.redirect(`${host}/?session=${encodeURIComponent(key)}`);
 }
 
@@ -97,12 +138,12 @@ function handleMobilePost(body, res) {
  *   objectType, language, dataCloudFullQualifiedDomainName }
  */
 app.post('/web-container-access-point', (req, res) => {
-    handleMobilePost(req.body || {}, res);
+    handleMobilePost(req, res);
 });
 
 // Fallback: some FSM versions POST to root
 app.post('/', (req, res) => {
-    handleMobilePost(req.body || {}, res);
+    handleMobilePost(req, res);
 });
 
 /**
