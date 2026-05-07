@@ -21,14 +21,9 @@ sap.ui.define([
         _loadContext() {
             const oModel = this.getView().getModel("view");
 
-            const params = new URLSearchParams(window.location.search);
-            const sessionKey = params.get("session");
-
-            const url = sessionKey
-                ? `/web-container-context?session=${encodeURIComponent(sessionKey)}`
-                : "/web-container-context";
-
-            fetch(url)
+            // Session is delivered via HttpOnly fsm_session cookie set by the backend
+            // on the FSM Mobile entry POST. The browser sends it automatically.
+            fetch("/api/v1/context")
                 .then(response => {
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     return response.json();
@@ -55,7 +50,7 @@ sap.ui.define([
             const oModel = this.getView().getModel("view");
             oModel.setProperty("/reportLoading", true);
 
-            fetch(`/api/udo-values?cloudId=${encodeURIComponent(cloudId)}`)
+            fetch(`/api/v1/udo-values?cloudId=${encodeURIComponent(cloudId)}`)
                 .then(response => {
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     return response.json();
@@ -76,7 +71,7 @@ sap.ui.define([
 
         _buildReport(objectId, reportTemplateId) {
             const oModel = this.getView().getModel("view");
-            const reportUrl = `/api/build-report?objectId=${encodeURIComponent(objectId)}&reportTemplate=${encodeURIComponent(reportTemplateId)}&language=de`;
+            const reportUrl = `/api/v1/build-report?objectId=${encodeURIComponent(objectId)}&reportTemplate=${encodeURIComponent(reportTemplateId)}&language=de`;
             oModel.setProperty("/reportUrl", reportUrl);
             oModel.setProperty("/reportLoading", false);
         }
