@@ -1,7 +1,7 @@
 /* global QUnit */
 QUnit.config.autostart = false;
 
-sap.ui.require(["mobileappprevpdf/test/integration/AllJourneys"
+sap.ui.require(["com/tng/fsm/inspreppdfviewext/app/test/integration/AllJourneys"
 ], function () {
 	QUnit.start();
 });

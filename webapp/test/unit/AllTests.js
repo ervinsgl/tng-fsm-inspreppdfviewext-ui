@@ -1,5 +1,5 @@
 sap.ui.define([
-	"mobileappprevpdf/test/unit/controller/View1.controller"
+	"com/tng/fsm/inspreppdfviewext/app/test/unit/controller/View1.controller"
 ], function () {
 	"use strict";
 });
