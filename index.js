@@ -57,6 +57,19 @@ const sessionStore = {};
 const SESSION_TTL_MS = 60 * 60 * 1000;
 
 /**
+ * Cookie attributes for the fsm_session cookie.
+ * Used by both initial issuance (handleMobilePost) and TTL refresh (requireSession).
+ * Keep these consistent — drift between the two emission points causes hard-to-diagnose bugs.
+ */
+const SESSION_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_TTL_MS
+};
+
+/**
  * Remove expired sessions and orphaned contexts. Runs every 10 minutes.
  * - Session is removed if its expiresAt is in the past.
  * - Context is removed if no session references it.
@@ -134,6 +147,14 @@ function requireSession(req, res, next) {
         return res.status(401).json({ message: 'Context not found for this session.' });
     }
 
+    // ===========================
+    // SLIDING TTL — refresh expiration on every authenticated request
+    // ===========================
+    session.expiresAt = Date.now() + SESSION_TTL_MS;
+
+    // Refresh browser-side cookie Max-Age so it doesn't expire while server-side is still alive
+    res.cookie('fsm_session', sessionToken, SESSION_COOKIE_OPTIONS);
+
     // Attach to req for downstream handlers
     req.session = session;
     req.context = context;
@@ -194,13 +215,7 @@ function handleMobilePost(req, res) {
     const expiresAt = Date.now() + SESSION_TTL_MS;
     sessionStore[sessionToken] = { contextKey, expiresAt };
 
-    res.cookie('fsm_session', sessionToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'lax',
-        path: '/',
-        maxAge: SESSION_TTL_MS
-    });
+    res.cookie('fsm_session', sessionToken, SESSION_COOKIE_OPTIONS);
 
     console.log(`WC-ACCESS-POINT: context stored, session issued | user: ${userName} | objectType: ${body.objectType} | contextKey: ${contextKey} | sessionStoreSize: ${Object.keys(sessionStore).length}`);
 
