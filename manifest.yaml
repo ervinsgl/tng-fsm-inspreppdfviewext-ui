@@ -1,5 +1,5 @@
 applications:
-  - name: mobileappprevpdf
+  - name: tng-fsm-inspreppdfviewext-ui-dev
     memory: 256M
     disk_quota: 512M
     instances: 1
@@ -8,6 +8,6 @@ applications:
     command: npm start
     path: .
     routes:
-      - route: mobileappprevpdf-webcontainer-test-op.cfapps.eu10-004.hana.ondemand.com
+      - route: tng-fsm-inspreppdfviewext-ui-dev-fsm-dev-op.cfapps.eu10-004.hana.ondemand.com
     services:
-      - mobileappprevpdf-destination
+      - fsm-inspreppdfviewext-destination-dev
