@@ -104,6 +104,43 @@ app.use(cookieParser());
 app.enable('trust proxy');
 
 // ===========================
+// SESSION MIDDLEWARE
+// ===========================
+
+/**
+ * requireSession — guards protected routes.
+ * Reads the fsm_session cookie, looks up the session, validates expiration.
+ * On success: attaches req.session and req.context, calls next().
+ * On failure: returns 401 with a structured log line.
+ */
+function requireSession(req, res, next) {
+    const sessionToken = req.cookies?.fsm_session;
+
+    if (!sessionToken) {
+        console.warn(`AUTH: rejected ${req.method} ${req.originalUrl} — missing-credential | source=none`);
+        return res.status(401).json({ message: 'No session. Open from FSM Mobile.' });
+    }
+
+    const session = sessionStore[sessionToken];
+    if (!session || session.expiresAt < Date.now()) {
+        const reason = !session ? 'unknown-token' : 'expired';
+        console.warn(`AUTH: rejected ${req.method} ${req.originalUrl} — invalid-or-expired (${reason}) | source=cookie`);
+        return res.status(401).json({ message: 'Session not found or expired.' });
+    }
+
+    const context = contextStore[session.contextKey];
+    if (!context) {
+        console.warn(`AUTH: rejected ${req.method} ${req.originalUrl} — context-missing | contextKey=${session.contextKey}`);
+        return res.status(401).json({ message: 'Context not found for this session.' });
+    }
+
+    // Attach to req for downstream handlers
+    req.session = session;
+    req.context = context;
+    next();
+}
+
+// ===========================
 // WEB CONTAINER ENTRY POINT
 // ===========================
 
@@ -197,27 +234,21 @@ app.post('/', (req, res) => {
  * Returns 404 if no session key is provided or the key is not found
  * (e.g. app opened directly in a browser, or session expired).
  */
-app.get('/web-container-context', (req, res) => {
-    const sessionToken = req.cookies?.fsm_session;
-
-    if (!sessionToken) {
-        return res.status(401).json({ message: 'No session. Open from FSM Mobile.' });
-    }
-
-    const session = sessionStore[sessionToken];
-    if (!session || session.expiresAt < Date.now()) {
-        return res.status(401).json({ message: 'Session not found or expired.' });
-    }
-
-    const context = contextStore[session.contextKey];
-    if (!context) {
-        return res.status(404).json({ message: 'Context not found for this session.' });
-    }
-
-    // Return context without internal fields and never include the auth key
-    const { _storedAt, authenticationKey, ...contextData } = context;
+/**
+ * Returns the FSM context tied to the current session.
+ * Single shared handler used by both legacy and v1 paths.
+ */
+function handleContextFetch(req, res) {
+    // requireSession has already attached req.context
+    const { _storedAt, authenticationKey, ...contextData } = req.context;
     return res.json(contextData);
-});
+}
+
+// Legacy path — kept until S5 frontend migration is verified
+app.get('/web-container-context', requireSession, handleContextFetch);
+
+// v1 path — new canonical location
+app.get('/api/v1/context', requireSession, handleContextFetch);
 
 // ===========================
 // FSM API ENDPOINTS
@@ -229,7 +260,11 @@ app.get('/web-container-context', (req, res) => {
  * Queries FSM UdoValue API using the cloudId (upper-cased) and returns
  * the checklist instance and preliminary report template values.
  */
-app.get('/api/udo-values', async (req, res) => {
+/**
+ * Shared handler — UdoValue lookup for a given cloudId.
+ * Used by both legacy and v1 paths.
+ */
+async function handleUdoValuesFetch(req, res) {
     const cloudId = req.query.cloudId;
 
     if (!cloudId) {
@@ -243,7 +278,13 @@ app.get('/api/udo-values', async (req, res) => {
         console.error('UdoValue endpoint error:', error.message);
         return res.status(500).json({ message: 'Failed to fetch UdoValue data.' });
     }
-});
+}
+
+// Legacy path — kept until S5 frontend migration is verified
+app.get('/api/udo-values', requireSession, handleUdoValuesFetch);
+
+// v1 path — new canonical location
+app.get('/api/v1/udo-values', requireSession, handleUdoValuesFetch);
 
 /**
  * GET /api/build-report?objectId=<id>&reportTemplate=<id>&language=<lang>
@@ -253,7 +294,11 @@ app.get('/api/udo-values', async (req, res) => {
  * - reportTemplate: Report template UUID (z_Linker_PreliminaryReportTemplate)
  * - language: Report language (default: 'de')
  */
-app.get('/api/build-report', async (req, res) => {
+/**
+ * Shared handler — build PDF report via FSM Reporting API.
+ * Used by both legacy and v1 paths.
+ */
+async function handleBuildReport(req, res) {
     const { objectId, reportTemplate, language } = req.query;
 
     if (!objectId || !reportTemplate) {
@@ -274,7 +319,13 @@ app.get('/api/build-report', async (req, res) => {
         console.error('Build report endpoint error:', error.message);
         return res.status(500).json({ message: error.message || 'Failed to build report.' });
     }
-});
+}
+
+// Legacy path — kept until S5 frontend migration is verified
+app.get('/api/build-report', requireSession, handleBuildReport);
+
+// v1 path — new canonical location
+app.get('/api/v1/build-report', requireSession, handleBuildReport);
 
 // ===========================
 // STATIC FILES (UI5 frontend)
