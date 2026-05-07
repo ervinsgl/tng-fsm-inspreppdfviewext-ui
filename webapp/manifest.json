@@ -50,7 +50,10 @@
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
           "bundleName": "mobileappprevpdf.i18n.i18n",
-          "supportedLocales": ["", "de"],
+          "supportedLocales": [
+            "",
+            "de"
+          ],
           "fallbackLocale": ""
         }
       }
@@ -76,17 +79,17 @@
       },
       "routes": [
         {
-          "name": "RouteView1",
+          "name": "RouteInspRepPDFViewExt",
           "pattern": ":?query:",
           "target": [
-            "TargetView1"
+            "TargetInspRepPDFViewExt"
           ]
         }
       ],
       "targets": {
-        "TargetView1": {
-          "id": "View1",
-          "name": "View1"
+        "TargetInspRepPDFViewExt": {
+          "id": "InspRepPDFViewExt",
+          "name": "InspRepPDFViewExt"
         }
       }
     },
