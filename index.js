@@ -217,8 +217,8 @@ function handleMobilePost(req, res) {
 
     res.cookie('fsm_session', sessionToken, SESSION_COOKIE_OPTIONS);
 
-    console.log(`WC-ACCESS-POINT: context stored, session issued | user: ${userName} | objectType: ${body.objectType} | contextKey: ${contextKey} | sessionStoreSize: ${Object.keys(sessionStore).length}`);
-
+    console.log(`WC-ACCESS-POINT: context stored, session issued (contextKey=${contextKey}, sessionStoreSize=${Object.keys(sessionStore).length})`);
+    
     // Redirect to app root — cookie is now set, no query param needed
     res.redirect('/');
 }
@@ -327,5 +327,8 @@ app.use(express.static(path.join(__dirname, 'webapp')));
 // ===========================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`FSM Web Container app running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Session TTL: ${SESSION_TTL_MS / 60000} minutes (sliding)`);
+    console.log(`Cookie: HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_MS / 1000}`);
+    console.log(`API mounted at /api/v1 (strict auth — Mobile flow only)`);
 });
