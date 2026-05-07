@@ -14,7 +14,7 @@ sap.ui.define([
 			// start the app UI component
 			this.iStartMyUIComponent({
 				componentConfig: {
-					name: "mobileappprevpdf",
+					name: "com.tng.fsm.inspreppdfviewext.app",
 					async: true
 				},
 				hash: oOptions.hash,
