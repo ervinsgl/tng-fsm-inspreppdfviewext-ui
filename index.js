@@ -16,6 +16,7 @@
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
 const FSMService = require('./utils/FSMService');
 
 const app = express();
@@ -32,32 +33,60 @@ if (!FSM_WEBCONTAINER_AUTH_KEY) {
 console.log(`FSM_WEBCONTAINER_AUTH_KEY is set (${FSM_WEBCONTAINER_AUTH_KEY.length} chars)`);
 
 // ===========================
-// SESSION CONTEXT STORAGE
+// SESSION & CONTEXT STORAGE
 // ===========================
 
 /**
- * Map of sessionKey -> { ...fsmContext, _timestamp }
- * Key format: "<userName>-<cloudId>"
- * One entry per user+object combination, cleaned up after SESSION_TTL_MS.
+ * Context store: keyed by contextKey ("<userName>_<cloudId>").
+ * Holds the FSM context data sent by FSM Mobile in the entry POST.
+ * @type {Object<string, Object>}
  */
-const sessions = {};
-const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+const contextStore = {};
 
 /**
- * Remove sessions older than SESSION_TTL_MS.
- * Runs every 10 minutes.
+ * Session store: keyed by random session token (base64url, 32 bytes).
+ * Maps token -> { contextKey, expiresAt }.
+ * The token is also set as an HttpOnly cookie on the client.
+ * @type {Object<string, {contextKey: string, expiresAt: number}>}
+ */
+const sessionStore = {};
+
+/**
+ * Session lifetime — 60 minutes, sliding (refreshed on each authenticated request in S6).
+ */
+const SESSION_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Remove expired sessions and orphaned contexts. Runs every 10 minutes.
+ * - Session is removed if its expiresAt is in the past.
+ * - Context is removed if no session references it.
  */
 setInterval(() => {
-    const cutoff = Date.now() - SESSION_TTL_MS;
-    let removed = 0;
-    Object.keys(sessions).forEach(key => {
-        if (sessions[key]._timestamp < cutoff) {
-            delete sessions[key];
-            removed++;
+    const now = Date.now();
+    let removedSessions = 0;
+    let removedContexts = 0;
+
+    // Sessions: remove expired
+    Object.keys(sessionStore).forEach(token => {
+        if (sessionStore[token].expiresAt < now) {
+            delete sessionStore[token];
+            removedSessions++;
         }
     });
-    if (removed > 0) {
-        console.log(`Session cleanup: removed ${removed} expired session(s). Active: ${Object.keys(sessions).length}`);
+
+    // Contexts: remove orphans (no session references them anymore)
+    const referencedContextKeys = new Set(
+        Object.values(sessionStore).map(s => s.contextKey)
+    );
+    Object.keys(contextStore).forEach(key => {
+        if (!referencedContextKeys.has(key)) {
+            delete contextStore[key];
+            removedContexts++;
+        }
+    });
+
+    if (removedSessions > 0 || removedContexts > 0) {
+        console.log(`Session cleanup: removed ${removedSessions} session(s), ${removedContexts} context(s). Active sessions: ${Object.keys(sessionStore).length}`);
     }
 }, 10 * 60 * 1000);
 
@@ -71,6 +100,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 app.enable('trust proxy');
 
 // ===========================
@@ -102,7 +132,7 @@ function isValidAuthKey(providedKey) {
 function handleMobilePost(req, res) {
     const body = req.body || {};
     const userName = body.userName || 'unknown';
-    const cloudId  = body.cloudId  || 'unknown';
+    const cloudId = body.cloudId || 'unknown';
 
     // ===========================
     // AUTH CHECK
@@ -116,15 +146,29 @@ function handleMobilePost(req, res) {
     // ===========================
     // STORE CONTEXT
     // ===========================
-    const key = `${userName}-${cloudId}`;
-    sessions[key] = { ...body, _timestamp: Date.now() };
+    const contextKey = `${userName}_${cloudId}`;
+    contextStore[contextKey] = { ...body, _storedAt: Date.now() };
+    delete contextStore[contextKey].authenticationKey;  // never persist the secret
 
-    console.log(`WC-ACCESS-POINT: context stored | user: ${userName} | objectType: ${body.objectType} | contextKey: ${key}`);
+    // ===========================
+    // ISSUE SESSION
+    // ===========================
+    const sessionToken = crypto.randomBytes(32).toString('base64url');
+    const expiresAt = Date.now() + SESSION_TTL_MS;
+    sessionStore[sessionToken] = { contextKey, expiresAt };
 
-    // Redirect to app root with session key as query param
-    // (Note: this query param mechanism will be replaced by an HttpOnly cookie in S3)
-    const host = req.protocol + '://' + req.get('host');
-    res.redirect(`${host}/?session=${encodeURIComponent(key)}`);
+    res.cookie('fsm_session', sessionToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: SESSION_TTL_MS
+    });
+
+    console.log(`WC-ACCESS-POINT: context stored, session issued | user: ${userName} | objectType: ${body.objectType} | contextKey: ${contextKey} | sessionStoreSize: ${Object.keys(sessionStore).length}`);
+
+    // Redirect to app root — cookie is now set, no query param needed
+    res.redirect('/');
 }
 
 /**
@@ -154,19 +198,24 @@ app.post('/', (req, res) => {
  * (e.g. app opened directly in a browser, or session expired).
  */
 app.get('/web-container-context', (req, res) => {
-    const key = req.query.session;
+    const sessionToken = req.cookies?.fsm_session;
 
-    if (!key) {
-        return res.status(404).json({ message: 'No session key provided. Open from FSM Mobile.' });
+    if (!sessionToken) {
+        return res.status(401).json({ message: 'No session. Open from FSM Mobile.' });
     }
 
-    const context = sessions[key];
+    const session = sessionStore[sessionToken];
+    if (!session || session.expiresAt < Date.now()) {
+        return res.status(401).json({ message: 'Session not found or expired.' });
+    }
+
+    const context = contextStore[session.contextKey];
     if (!context) {
-        return res.status(404).json({ message: `Session '${key}' not found or expired.` });
+        return res.status(404).json({ message: 'Context not found for this session.' });
     }
 
-    // Return context without the internal timestamp field
-    const { _timestamp, ...contextData } = context;
+    // Return context without internal fields and never include the auth key
+    const { _storedAt, authenticationKey, ...contextData } = context;
     return res.json(contextData);
 });
 
