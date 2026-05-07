@@ -228,13 +228,6 @@ app.post('/', (req, res) => {
 });
 
 /**
- * GET /web-container-context?session=<key>
- *
- * Frontend calls this on load to retrieve its own stored context.
- * Returns 404 if no session key is provided or the key is not found
- * (e.g. app opened directly in a browser, or session expired).
- */
-/**
  * Returns the FSM context tied to the current session.
  * Single shared handler used by both legacy and v1 paths.
  */
@@ -244,22 +237,12 @@ function handleContextFetch(req, res) {
     return res.json(contextData);
 }
 
-// Legacy path — kept until S5 frontend migration is verified
-app.get('/web-container-context', requireSession, handleContextFetch);
-
-// v1 path — new canonical location
 app.get('/api/v1/context', requireSession, handleContextFetch);
 
 // ===========================
 // FSM API ENDPOINTS
 // ===========================
 
-/**
- * GET /api/udo-values?cloudId=<id>
- *
- * Queries FSM UdoValue API using the cloudId (upper-cased) and returns
- * the checklist instance and preliminary report template values.
- */
 /**
  * Shared handler — UdoValue lookup for a given cloudId.
  * Used by both legacy and v1 paths.
@@ -280,10 +263,6 @@ async function handleUdoValuesFetch(req, res) {
     }
 }
 
-// Legacy path — kept until S5 frontend migration is verified
-app.get('/api/udo-values', requireSession, handleUdoValuesFetch);
-
-// v1 path — new canonical location
 app.get('/api/v1/udo-values', requireSession, handleUdoValuesFetch);
 
 /**
@@ -321,10 +300,6 @@ async function handleBuildReport(req, res) {
     }
 }
 
-// Legacy path — kept until S5 frontend migration is verified
-app.get('/api/build-report', requireSession, handleBuildReport);
-
-// v1 path — new canonical location
 app.get('/api/v1/build-report', requireSession, handleBuildReport);
 
 // ===========================
