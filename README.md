@@ -1,8 +1,8 @@
 # Inspection Report PDF Viewer Extension — FSM Mobile App
 
-> **App ID:** `com.tng.fsm.inspreppdfviewext.app`
-> **CF App Name:** `tng-fsm-inspreppdfviewext-ui-dev`
-> **Repository:** `tng-fsm-inspreppdfviewext-ui`
+> **App ID:** `com.tns.fsm.inspreppdfviewext.app`
+> **CF App Name:** `tns-fsm-inspreppdfviewext-ui` (DevOps DEV/QA/PROD via mta.yaml) / `tns-fsm-inspreppdfviewext-ui-sandbox` (local sandbox via manifest.yaml)
+> **Repository:** `tns-fsm-inspreppdfviewext-ui`
 
 A SAP Fiori mobile application for SAP Field Service Management (FSM), designed to run in FSM Mobile (Web Container). Automatically generates and displays a checklist report (PDF) based on the opened checklist instance.
 
@@ -111,7 +111,7 @@ This application provides a seamless preliminary report preview experience withi
                                │ OAuth Token
                                ▼
                       ┌─────────────────┐
-                      │ BTP Destination │  (FSM_S4E)
+                      │ BTP Destination │  (FSM_OAUTH_CONNECT)
                       │    Service      │
                       └────────┬────────┘
                                │ Authenticated Request
@@ -192,11 +192,11 @@ For full security architecture details, threat model, and rotation procedures, s
 
 | Service | Instance Name | Purpose |
 |---------|---------------|---------|
-| **Destination Service** | `fsm-inspreppdfviewext-destination-dev` | FSM API connectivity (binds to subaccount-level destination `FSM_S4E`) |
+| **Destination Service** | `fsm-inspreppdfviewext-destination` | FSM API connectivity (binds to subaccount-level destination `FSM_OAUTH_CONNECT`) |
 
-### Destination Configuration (FSM_S4E):
+### Destination Configuration (FSM_OAUTH_CONNECT):
 
-The destination `FSM_S4E` must be configured in BTP Cockpit with:
+The destination `FSM_OAUTH_CONNECT` must be configured in BTP Cockpit with:
 
 | Property | Description |
 |----------|-------------|
@@ -233,7 +233,7 @@ The destination `FSM_S4E` must be configured in BTP Cockpit with:
 ### 1. Clone & Install
 ```bash
 git clone <repository-url>
-cd com.tng.fsm.inspreppdfviewext.app
+cd com.tns.fsm.inspreppdfviewext.app
 npm install
 ```
 
@@ -242,15 +242,15 @@ npm install
 The destination name is configured in a single place. Edit `utils/FSMService.js`:
 ```javascript
 this.config = {
-    destinationName: 'FSM_S4E'  // Change here to switch destination
+    destinationName: 'FSM_OAUTH_CONNECT'  // Change here to switch destination
 };
 ```
 
 ### 3. Configure BTP Destination
 
-Create a destination named **FSM_S4E** in SAP BTP Cockpit:
+Create a destination named **FSM_OAUTH_CONNECT** in SAP BTP Cockpit:
 ```
-Name: FSM_S4E
+Name: FSM_OAUTH_CONNECT
 Type: HTTP
 URL: https://de.fsm.cloud.sap
 Authentication: OAuth2ClientCredentials
@@ -269,13 +269,25 @@ Additional Properties:
 
 ### 4. Create Destination Service Instance
 ```bash
-cf create-service destination lite com.tng.fsm.inspreppdfviewext.app-destination
+cf create-service destination lite fsm-inspreppdfviewext-destination
 ```
 
 ### 5. Deploy to Cloud Foundry
+
+There are two deployment paths:
+
+**A. Local sandbox (this is what you run yourself)** — uses `manifest.yaml`, creates the app `tns-fsm-inspreppdfviewext-ui-sandbox`:
 ```bash
 cf push
 ```
+
+**B. DevOps DEV/QA/PROD (the pipeline)** — uses `mta.yaml`, builds an `.mtar` and deploys the app `tns-fsm-inspreppdfviewext-ui` into the target subaccount:
+```bash
+npm run build:mta   # produces mta_archives/*.mtar
+cf deploy mta_archives/*.mtar
+```
+
+> `manifest.yaml` is a **sandbox-only** file (pinned `-sandbox` name and route) and must not drive a DevOps deploy. The pipeline uses `mta.yaml` exclusively. The `-sandbox` name guarantees the local app can never collide with the pipeline's `tns-fsm-inspreppdfviewext-ui`.
 
 ### 6. Configure FSM Authentication Key
 
@@ -288,9 +300,11 @@ openssl rand -base64 32
 Set it as an environment variable on the deployed app:
 
 ​```bash
-cf set-env tng-fsm-inspreppdfviewext-ui-dev FSM_WEBCONTAINER_AUTH_KEY '<paste-value-from-openssl>'
-cf restage tng-fsm-inspreppdfviewext-ui-dev
+cf set-env tns-fsm-inspreppdfviewext-ui FSM_WEBCONTAINER_AUTH_KEY '<paste-value-from-openssl>'
+cf restage tns-fsm-inspreppdfviewext-ui
 ​```
+
+> The commands below use the DevOps app name `tns-fsm-inspreppdfviewext-ui`. If you are working in your **local sandbox**, substitute `tns-fsm-inspreppdfviewext-ui-sandbox` for the app name throughout.
 
 Configure the same value in FSM Admin:
 - **FSM Admin → Companies → [Your Company] → Web Containers → [Your Web Container] → Authentication Key field**
@@ -301,10 +315,10 @@ The two values must match byte-exactly. Mismatches return 401 on every Mobile la
 
 ### 7. Get Application URL
 ```bash
-cf app com.tng.fsm.inspreppdfviewext.app
+cf app tns-fsm-inspreppdfviewext-ui
 ```
 
-Copy the URL (e.g., `https://com.tng.fsm.inspreppdfviewext.app-xxx.cfapps.eu10.hana.ondemand.com`)
+Copy the URL (e.g., `https://tns-fsm-inspreppdfviewext-ui-<orgslug>.cfapps.eu10-004.hana.ondemand.com`)
 
 ---
 
@@ -318,7 +332,7 @@ Navigate to: **FSM Admin → Company → Web Containers**
 | Field | Value |
 |-------|-------|
 | **Name** | `TUVNMobileAppPreviewPDF` |
-| **URL** | `https://com.tng.fsm.inspreppdfviewext.app-xxx.cfapps.eu10.hana.ondemand.com/web-container-access-point` |
+| **URL** | `https://tns-fsm-inspreppdfviewext-ui-<orgslug>.cfapps.eu10-004.hana.ondemand.com/web-container-access-point` |
 | **Object Types** | `ChecklistInstance` |
 | **Active** | ✓ Checked |
 
@@ -409,7 +423,7 @@ When opened from FSM Mobile, the web container automatically POSTs context data:
 └──────────────────────────┬──────────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  3. Fetch FSM_S4E destination → Get FSM URL + OAuth config    │
+│  3. Fetch FSM_OAUTH_CONNECT destination → Get FSM URL + OAuth config    │
 └──────────────────────────┬──────────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -429,7 +443,7 @@ When opened from FSM Mobile, the web container automatically POSTs context data:
 
 ## 📁 Project Structure
 ```
-com.tng.fsm.inspreppdfviewext.app/
+com.tns.fsm.inspreppdfviewext.app/
 │
 ├── # ─────────── ROOT LEVEL ───────────
 ├── index.js                             # Express server: context storage, API endpoints
@@ -532,17 +546,17 @@ webapp/
 | Issue | Cause | Solution |
 |-------|-------|----------|
 | "Open from FSM Mobile" message | App opened directly in browser | Open from FSM Mobile via configured Web Container |
-| "Could not build the report" | UdoValue lookup or report build failed | Check server logs via `cf logs com.tng.fsm.inspreppdfviewext.app --recent` |
+| "Could not build the report" | UdoValue lookup or report build failed | Check server logs via `cf logs tns-fsm-inspreppdfviewext-ui --recent` |
 | PDF shows "The PDF cannot be displayed" | `isTrustedSource` not set | Ensure `isTrustedSource="true"` on `PDFViewer` (UI5 1.120.7+ breaking change) |
 | CA-207: Offline report error | Report template configured as offline | Set `CoreSystems.Checklist.GenerateOfflineChecklistReport` to `false` in FSM Company Settings |
 | CA-31: Resource not found | Report template missing subreport/resource files | Upload all referenced resources alongside the template in FSM |
 | CA-152: No Udf into UdfMeta | Report template references missing custom field | Create the missing UDF on the ChecklistInstance object type in FSM Admin |
 | No UdoValue results | cloudId not matching any Linker_Object entries | Verify the checklist instance has a linked Linker_Object UdoValue with matching Instance1/Instance2 |
 | 401/403 on API calls | OAuth token expired or invalid credentials | Check destination configuration in BTP Cockpit |
-| Destination service not bound | VCAP_SERVICES missing destination | Run `cf bind-service com.tng.fsm.inspreppdfviewext.app com.tng.fsm.inspreppdfviewext.app-destination` and restage |
+| Destination service not bound | VCAP_SERVICES missing destination | Run `cf bind-service tns-fsm-inspreppdfviewext-ui fsm-inspreppdfviewext-destination` and restage |
 | Report takes long to load | Complex report template | FSM has a 5-minute / 1000-page limit for report generation |
-| App crash-loops with `FATAL: FSM_WEBCONTAINER_AUTH_KEY environment variable is not set` | Env var not set | `cf set-env tng-fsm-inspreppdfviewext-ui-dev FSM_WEBCONTAINER_AUTH_KEY '<value>' && cf restage tng-fsm-inspreppdfviewext-ui-dev` |
-| Mobile launch returns HTTP 401 with log `WC-ACCESS-POINT: rejected POST — authenticationKey mismatch` | Env var value doesn't match FSM Admin's Authentication Key field | Compare `cf env tng-fsm-inspreppdfviewext-ui-dev \| grep FSM_WEBCONTAINER_AUTH_KEY` against FSM Admin → Web Containers → Authentication Key. Both must be byte-exactly identical. |
+| App crash-loops with `FATAL: FSM_WEBCONTAINER_AUTH_KEY environment variable is not set` | Env var not set | `cf set-env tns-fsm-inspreppdfviewext-ui FSM_WEBCONTAINER_AUTH_KEY '<value>' && cf restage tns-fsm-inspreppdfviewext-ui` |
+| Mobile launch returns HTTP 401 with log `WC-ACCESS-POINT: rejected POST — authenticationKey mismatch` | Env var value doesn't match FSM Admin's Authentication Key field | Compare `cf env tns-fsm-inspreppdfviewext-ui \| grep FSM_WEBCONTAINER_AUTH_KEY` against FSM Admin → Web Containers → Authentication Key. Both must be byte-exactly identical. |
 | API calls return 401 with log `AUTH: rejected ... missing-credential` | Session cookie not present (e.g. opened directly in browser instead of via FSM Mobile) | Open from FSM Mobile via the configured Web Container, not directly in a browser |
 | API calls return 401 with log `AUTH: rejected ... invalid-or-expired` | Session expired (60 min idle) or app restarted (in-memory sessions purged) | User re-launches from FSM Mobile to issue a new session |
 
@@ -550,7 +564,7 @@ webapp/
 
 View server-side logs via Cloud Foundry:
 ```bash
-cf logs com.tng.fsm.inspreppdfviewext.app --recent
+cf logs tns-fsm-inspreppdfviewext-ui --recent
 ```
 
 **Key log patterns:**
@@ -569,8 +583,8 @@ cf logs com.tng.fsm.inspreppdfviewext.app --recent
 |                                    |                                                          |
 |------------------------------------|----------------------------------------------------------|
 | **App Name**                       | Inspection Report PDF Viewer Extension                   |
-| **App ID**                         | com.tng.fsm.inspreppdfviewext.app                        |
-| **CF App Name**                    | tng-fsm-inspreppdfviewext-ui-dev                         |
+| **App ID**                         | com.tns.fsm.inspreppdfviewext.app                        |
+| **CF App Name**                    | tns-fsm-inspreppdfviewext-ui                         |
 | **Framework**                      | SAP UI5 (Fiori) + Node.js Express                        |
 | **UI5 Theme**                      | sap_horizon                                              |
 | **UI5 Version**                    | 1.144.1 (loaded from CDN)                                |
@@ -604,7 +618,7 @@ cf logs com.tng.fsm.inspreppdfviewext.app --recent
 - Download button for saving PDF locally
 
 **Infrastructure:**
-- Single-point destination configuration (`FSM_S4E`)
+- Single-point destination configuration (`FSM_OAUTH_CONNECT`)
 - No hardcoded account/company fallbacks (reads from destination only)
 - OAuth token caching with 5-minute expiry buffer
 - Centralized `_getConnection()` helper (DRY pattern)

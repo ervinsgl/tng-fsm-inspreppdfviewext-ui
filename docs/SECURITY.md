@@ -1,6 +1,6 @@
 > **NOTE on this document:** SECURITY.md describes the **two-path** auth model
 > (FSM Mobile + FSM Web UI Shell) originally implemented in the T&M Journal app.
-> This app (`tng-fsm-inspreppdfviewext-ui-dev`) implements **only Path 1
+> This app (`tns-fsm-inspreppdfviewext-ui-dev`) implements **only Path 1
 > (FSM Mobile)**. References to Path 2 / Web UI Shell / JWT validator /
 > `/api/v1/shell-session-init` describe the design but are NOT implemented in
 > this codebase. App identifiers in this document also refer to the previous app —
@@ -9,7 +9,7 @@
 # Security Architecture
 
 > **Status:** Approved deviation from BTP coding guideline (Programmierrichtlinie für SAP-Erweiterungen §10).
-> **Last updated:** May 2026 (annotated for `tng-fsm-inspreppdfviewext-ui-dev` — Path 1 only)
+> **Last updated:** May 2026 (annotated for `tns-fsm-inspreppdfviewext-ui-dev` — Path 1 only)
 > **Owner:** [Team or person responsible — fill in]
 > **Architecture approval:** [Approver name and date — fill in per Programmierrichtlinie §12]
 
@@ -127,7 +127,7 @@ Mobile flow uses an HttpOnly cookie because:
 ### Why Web UI cannot use a cookie
 
 The FSM Web UI loads your app in an iframe. The iframe's domain
-(`com.tng.fsm.timematerialext.app-fsm-dev-op.cfapps.eu10-004.hana.ondemand.com`) is different from
+(`com.tns.fsm.timematerialext.app-fsm-dev-op.cfapps.eu10-004.hana.ondemand.com`) is different from
 the parent page's domain (`de.fsm.cloud.sap`). From the browser's perspective,
 the iframe is **third-party** content embedded in a first-party page.
 
@@ -185,8 +185,8 @@ FSM Mobile clients (transmitted internally during sync).
 **Rotation procedure:**
 1. Update FSM Admin → Web Containers → Authentication Key field.
 2. Wait briefly for the change to propagate.
-3. `cf set-env com.tng.fsm.timematerialext.app FSM_WEBCONTAINER_AUTH_KEY <new>` and
-   `cf restage com.tng.fsm.timematerialext.app`.
+3. `cf set-env com.tns.fsm.timematerialext.app FSM_WEBCONTAINER_AUTH_KEY <new>` and
+   `cf restage com.tns.fsm.timematerialext.app`.
 4. Active Mobile WebContainer launches return 401 during the brief window
    between FSM update and CF restage; users retap to launch with the new key.
 
@@ -411,7 +411,7 @@ This decision should be revisited if any of the following change:
 
 | Setting | Where | Value |
 |---|---|---|
-| Authentication Key | FSM Admin → Companies → [Company] → Web Containers → [TUVNcom.tng.fsm.timematerialext.appJournal] | Must byte-exactly match `FSM_WEBCONTAINER_AUTH_KEY` env var |
+| Authentication Key | FSM Admin → Companies → [Company] → Web Containers → [TUVNcom.tns.fsm.timematerialext.appJournal] | Must byte-exactly match `FSM_WEBCONTAINER_AUTH_KEY` env var |
 
 ### In-memory state
 

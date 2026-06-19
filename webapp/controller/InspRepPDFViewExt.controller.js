@@ -4,7 +4,7 @@ sap.ui.define([
 ], (Controller, JSONModel) => {
     "use strict";
 
-    return Controller.extend("com.tng.fsm.inspreppdfviewext.app.controller.InspRepPDFViewExt", {
+    return Controller.extend("com.tns.fsm.inspreppdfviewext.app.controller.InspRepPDFViewExt", {
 
         onInit() {
             this.getView().setModel(new JSONModel({

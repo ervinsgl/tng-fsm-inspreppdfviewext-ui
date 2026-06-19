@@ -3,7 +3,7 @@ sap.ui.define([
 ], (BaseController) => {
   "use strict";
 
-  return BaseController.extend("com.tng.fsm.inspreppdfviewext.app.controller.App", {
+  return BaseController.extend("com.tns.fsm.inspreppdfviewext.app.controller.App", {
       onInit() {
       }
   });

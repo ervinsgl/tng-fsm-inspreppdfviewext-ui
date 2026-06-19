@@ -1,5 +1,14 @@
+# ============================================================
+#  SANDBOX / LOCAL ONLY — DO NOT COMMIT TO THE DEVOPS REPO
+#  Personal test instance. The official DEV app is owned by
+#  the pipeline and uses the "-dev" names/route.
+#  NEVER copy the "-sandbox" name or route into the repo's
+#  manifest.yaml / mta.yaml — it would hijack the DEV route.
+#  Repo files must keep: app/ID/route = ...-dev
+# ============================================================
+
 applications:
-  - name: tng-fsm-inspreppdfviewext-ui-dev
+  - name: tns-fsm-inspreppdfviewext-ui-sandbox
     memory: 256M
     disk_quota: 512M
     instances: 1
@@ -8,6 +17,6 @@ applications:
     command: npm start
     path: .
     routes:
-      - route: tng-fsm-inspreppdfviewext-ui-dev-fsm-dev-op.cfapps.eu10-004.hana.ondemand.com
+      - route: tns-fsm-inspreppdfviewext-ui-sandbox-fsm-dev-op.cfapps.eu10-004.hana.ondemand.com
     services:
-      - fsm-inspreppdfviewext-destination-dev
+      - fsm-inspreppdfviewext-destination

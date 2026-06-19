@@ -1,5 +1,5 @@
 {
-  "xsappname": "com.tng.fsm.inspreppdfviewext.app",
+  "xsappname": "com.tns.fsm.inspreppdfviewext.app",
   "tenant-mode": "dedicated",
   "description": "Security profile of called application",
   "scopes": [],

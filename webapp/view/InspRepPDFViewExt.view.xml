@@ -1,5 +1,5 @@
 <mvc:View
-    controllerName="com.tng.fsm.inspreppdfviewext.app.controller.InspRepPDFViewExt"
+    controllerName="com.tns.fsm.inspreppdfviewext.app.controller.InspRepPDFViewExt"
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
     xmlns:layout="sap.ui.layout"

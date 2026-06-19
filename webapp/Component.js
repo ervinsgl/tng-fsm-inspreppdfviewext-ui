@@ -1,10 +1,10 @@
 sap.ui.define([
     "sap/ui/core/UIComponent",
-    "com/tng/fsm/inspreppdfviewext/app/model/models"
+    "com/tns/fsm/inspreppdfviewext/app/model/models"
 ], (UIComponent, models) => {
     "use strict";
 
-    return UIComponent.extend("com.tng.fsm.inspreppdfviewext.app.Component", {
+    return UIComponent.extend("com.tns.fsm.inspreppdfviewext.app.Component", {
         metadata: {
             manifest: "json",
             interfaces: [

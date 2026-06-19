@@ -22,7 +22,7 @@ class FSMService {
          * @type {{destinationName: string}}
          */
         this.config = {
-            destinationName: 'FSM_S4E'
+            destinationName: 'FSM_OAUTH_CONNECT'
         };
     }
 

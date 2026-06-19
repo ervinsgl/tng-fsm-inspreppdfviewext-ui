@@ -27,7 +27,7 @@ const app = express();
 const FSM_WEBCONTAINER_AUTH_KEY = process.env.FSM_WEBCONTAINER_AUTH_KEY;
 if (!FSM_WEBCONTAINER_AUTH_KEY) {
     console.error('FATAL: FSM_WEBCONTAINER_AUTH_KEY environment variable is not set.');
-    console.error('To set it: cf set-env tng-fsm-inspreppdfviewext-ui-dev FSM_WEBCONTAINER_AUTH_KEY \'<value>\' && cf restage tng-fsm-inspreppdfviewext-ui-dev');
+    console.error('To set it: cf set-env tns-fsm-inspreppdfviewext-ui-dev FSM_WEBCONTAINER_AUTH_KEY \'<value>\' && cf restage tns-fsm-inspreppdfviewext-ui-dev');
     process.exit(1);
 }
 console.log(`FSM_WEBCONTAINER_AUTH_KEY is set (${FSM_WEBCONTAINER_AUTH_KEY.length} chars)`);
